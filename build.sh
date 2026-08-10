@@ -89,7 +89,7 @@ echo
   -sdk "$SDKROOT" \
   -framework SwiftUI \
   -framework AppKit \
-  VPXLauncher.swift \
+  Sources/*.swift \
   -o "$EXE"
 
 /usr/bin/codesign --force --deep --sign - "$APP" >/dev/null
