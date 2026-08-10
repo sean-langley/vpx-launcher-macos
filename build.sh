@@ -21,7 +21,7 @@ SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-# Build the macOS .icns from the bundled 1024px source artwork.
+# Build the macOS .icns from the bundled source artwork.
 # iconutil and sips are part of macOS, so no extra tooling is required.
 ICON_SOURCE="$PWD/AppIcon.png"
 ICONSET="$BUILD_DIR/AppIcon.iconset"
@@ -37,7 +37,7 @@ if [[ -f "$ICON_SOURCE" ]]; then
   /usr/bin/sips -z 256 256   "$ICON_SOURCE" --out "$ICONSET/icon_256x256.png" >/dev/null
   /usr/bin/sips -z 512 512   "$ICON_SOURCE" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
   /usr/bin/sips -z 512 512   "$ICON_SOURCE" --out "$ICONSET/icon_512x512.png" >/dev/null
-  cp "$ICON_SOURCE" "$ICONSET/icon_512x512@2x.png"
+  /usr/bin/sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET/icon_512x512@2x.png" >/dev/null
   /usr/bin/iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 fi
 
@@ -79,7 +79,7 @@ echo "Swift compiler: $SWIFTC"
 echo "macOS SDK:      $SDKROOT"
 echo
 
-# Build for the host Mac.  Do not force a target triple here: recent
+# Build for the host Mac. Do not force a target triple here: recent
 # Command Line Tools installations can fail to locate the Swift standard
 # library when swiftc is given an explicit older macOS target even though
 # the native host target works correctly.
