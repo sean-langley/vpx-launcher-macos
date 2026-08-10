@@ -8,9 +8,12 @@ BUNDLE_ID="local.vpxlauncher.app"
 BUILD_DIR="$PWD/build"
 APP="$BUILD_DIR/$APP_NAME.app"
 EXE="$APP/Contents/MacOS/VPXLauncher"
+DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-13.0}"
+ARCH="$(uname -m)"
+TARGET="${ARCH}-apple-macosx${DEPLOYMENT_TARGET}"
 
 if ! command -v xcrun >/dev/null 2>&1; then
-  echo "xcrun not found. Install Xcode Command Line Tools first:"
+  echo "xcrun not found. Install Xcode or the Xcode Command Line Tools first:"
   echo "  xcode-select --install"
   exit 1
 fi
@@ -23,6 +26,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$BUILD_DIR"
 
 # Build the complete .iconset directly with AppKit. This intentionally avoids
 # sips so icon generation does not depend on ImageIO accepting a source PNG.
+# The icon generator itself is a build-time host tool, so it intentionally
+# targets the host macOS version rather than the app's deployment target.
 ICONSET="$BUILD_DIR/AppIcon.iconset"
 ICON_GENERATOR="$BUILD_DIR/IconGenerator.swift"
 ICON_GENERATOR_EXE="$BUILD_DIR/icon-generator"
@@ -118,8 +123,6 @@ func renderIcon(pixelSize: Int, path: String) throws {
         throw NSError(domain: "VPXLauncherIcon", code: 1)
     }
 
-    // Draw in a constant 1024-point coordinate system. The bitmap rep maps
-    // those logical coordinates onto the requested pixel dimensions.
     rep.size = NSSize(width: 1024, height: 1024)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
@@ -185,11 +188,11 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleShortVersionString</key>
     <string>0.3.0</string>
     <key>CFBundleVersion</key>
-    <string>7</string>
+    <string>8</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>$DEPLOYMENT_TARGET</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>
@@ -199,16 +202,26 @@ PLIST
 echo "Swift compiler: $SWIFTC"
 "$SWIFTC" --version
 echo "macOS SDK:      $SDKROOT"
+echo "Deployment:     macOS $DEPLOYMENT_TARGET ($TARGET)"
 echo
 
-# Build for the host Mac. Do not force a target triple here: recent
-# Command Line Tools installations can fail to locate the Swift standard
-# library when swiftc is given an explicit older macOS target even though
-# the native host target works correctly.
+# Validate the requested deployment target before doing the full compile. This
+# catches mismatched/incomplete Command Line Tools with a clear message rather
+# than silently producing an app that only runs on the build host's macOS.
+TARGET_PROBE="$BUILD_DIR/TargetProbe.swift"
+print 'import Foundation\n' > "$TARGET_PROBE"
+if ! "$SWIFTC" -sdk "$SDKROOT" -target "$TARGET" -typecheck "$TARGET_PROBE" >/dev/null 2>&1; then
+  echo "error: this Swift toolchain cannot compile for $TARGET" >&2
+  echo "The selected toolchain is: $SWIFTC" >&2
+  echo "Select a full Xcode installation with xcode-select, or set MACOSX_DEPLOYMENT_TARGET to a supported version." >&2
+  exit 1
+fi
+
 "$SWIFTC" \
   -O \
   -parse-as-library \
   -sdk "$SDKROOT" \
+  -target "$TARGET" \
   -framework SwiftUI \
   -framework AppKit \
   Sources/*.swift \
