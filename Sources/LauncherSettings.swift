@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 extension LauncherModel {
     // MARK: Folder / settings choosers
@@ -27,7 +28,7 @@ extension LauncherModel {
         panel.prompt = "Choose"
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedFileTypes = ["app"]
+        panel.allowedContentTypes = [.applicationBundle]
         panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
         if panel.runModal() == .OK, let url = panel.url {
             vpxAppPath = url.path
