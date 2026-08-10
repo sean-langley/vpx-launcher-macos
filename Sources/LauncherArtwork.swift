@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 extension LauncherModel {
     // MARK: Artwork and media
@@ -54,7 +55,7 @@ extension LauncherModel {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
-        panel.allowedFileTypes = Array(imageExtensions())
+        panel.allowedContentTypes = [.image]
         panel.directoryURL = entry.folderURL
         guard panel.runModal() == .OK, let source = panel.url else { return }
 
