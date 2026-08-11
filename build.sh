@@ -24,146 +24,29 @@ SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$BUILD_DIR"
 
-# Build the complete .iconset directly with AppKit. This intentionally avoids
-# sips so icon generation does not depend on ImageIO accepting a source PNG.
-# The icon generator itself is a build-time host tool, so it intentionally
-# targets the host macOS version rather than the app's deployment target.
+# Build the macOS .icns from the original launcher artwork bundled with the
+# project. Keep AppIcon.png as the canonical icon; do not redraw it at build
+# time so the app always retains the original VPX Launcher artwork.
+ICON_SOURCE="$PWD/AppIcon.png"
 ICONSET="$BUILD_DIR/AppIcon.iconset"
-ICON_GENERATOR="$BUILD_DIR/IconGenerator.swift"
-ICON_GENERATOR_EXE="$BUILD_DIR/icon-generator"
+
+if [[ ! -f "$ICON_SOURCE" ]]; then
+  echo "error: missing $ICON_SOURCE" >&2
+  exit 1
+fi
+
 rm -rf "$ICONSET"
 mkdir -p "$ICONSET"
-
-cat > "$ICON_GENERATOR" <<'SWIFT'
-import AppKit
-import Foundation
-
-func drawLauncherIcon() {
-    let outerRect = NSRect(x: 32, y: 32, width: 960, height: 960)
-    let outer = NSBezierPath(roundedRect: outerRect, xRadius: 210, yRadius: 210)
-    let background = NSGradient(colors: [
-        NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.14, alpha: 1),
-        NSColor(calibratedRed: 0.15, green: 0.07, blue: 0.27, alpha: 1),
-        NSColor(calibratedRed: 0.02, green: 0.07, blue: 0.14, alpha: 1)
-    ])!
-    background.draw(in: outer, angle: -65)
-
-    NSColor(calibratedWhite: 1.0, alpha: 0.55).setStroke()
-    outer.lineWidth = 10
-    outer.stroke()
-
-    let centered = NSMutableParagraphStyle()
-    centered.alignment = .center
-
-    let vpxAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 240, weight: .black),
-        .foregroundColor: NSColor.white,
-        .strokeColor: NSColor(calibratedWhite: 0.1, alpha: 0.9),
-        .strokeWidth: -3.0,
-        .paragraphStyle: centered
-    ]
-    ("VPX" as NSString).draw(in: NSRect(x: 85, y: 650, width: 854, height: 275), withAttributes: vpxAttrs)
-
-    let launcherAttrs: [NSAttributedString.Key: Any] = [
-        .font: NSFont.systemFont(ofSize: 74, weight: .semibold),
-        .foregroundColor: NSColor(calibratedWhite: 0.9, alpha: 1),
-        .kern: 14,
-        .paragraphStyle: centered
-    ]
-    ("LAUNCHER" as NSString).draw(in: NSRect(x: 80, y: 580, width: 864, height: 100), withAttributes: launcherAttrs)
-
-    let ballRect = NSRect(x: 394, y: 330, width: 236, height: 236)
-    let ball = NSBezierPath(ovalIn: ballRect)
-    let chrome = NSGradient(colors: [
-        NSColor.white,
-        NSColor(calibratedWhite: 0.70, alpha: 1),
-        NSColor(calibratedWhite: 0.18, alpha: 1),
-        NSColor(calibratedWhite: 0.82, alpha: 1)
-    ])!
-    chrome.draw(in: ball, angle: -45)
-    NSColor(calibratedWhite: 1, alpha: 0.65).setStroke()
-    ball.lineWidth = 6
-    ball.stroke()
-
-    func drawFlipper(from a: NSPoint, to b: NSPoint) {
-        let body = NSBezierPath()
-        body.move(to: a)
-        body.line(to: b)
-        body.lineWidth = 92
-        body.lineCapStyle = .round
-        NSColor(calibratedWhite: 0.93, alpha: 1).setStroke()
-        body.stroke()
-
-        let inset = NSBezierPath()
-        inset.move(to: a)
-        inset.line(to: b)
-        inset.lineWidth = 43
-        inset.lineCapStyle = .round
-        NSColor(calibratedRed: 0.82, green: 0.08, blue: 0.10, alpha: 1).setStroke()
-        inset.stroke()
-    }
-
-    drawFlipper(from: NSPoint(x: 205, y: 220), to: NSPoint(x: 425, y: 300))
-    drawFlipper(from: NSPoint(x: 819, y: 220), to: NSPoint(x: 599, y: 300))
-}
-
-func renderIcon(pixelSize: Int, path: String) throws {
-    guard let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: pixelSize,
-        pixelsHigh: pixelSize,
-        bitsPerSample: 8,
-        samplesPerPixel: 4,
-        hasAlpha: true,
-        isPlanar: false,
-        colorSpaceName: .deviceRGB,
-        bytesPerRow: 0,
-        bitsPerPixel: 0
-    ), let context = NSGraphicsContext(bitmapImageRep: rep) else {
-        throw NSError(domain: "VPXLauncherIcon", code: 1)
-    }
-
-    rep.size = NSSize(width: 1024, height: 1024)
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = context
-    NSColor.clear.setFill()
-    NSRect(x: 0, y: 0, width: 1024, height: 1024).fill()
-    drawLauncherIcon()
-    context.flushGraphics()
-    NSGraphicsContext.restoreGraphicsState()
-
-    guard let png = rep.representation(using: .png, properties: [:]) else {
-        throw NSError(domain: "VPXLauncherIcon", code: 2)
-    }
-    try png.write(to: URL(fileURLWithPath: path), options: .atomic)
-}
-
-let outputDirectory = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
-let files: [(String, Int)] = [
-    ("icon_16x16.png", 16),
-    ("icon_16x16@2x.png", 32),
-    ("icon_32x32.png", 32),
-    ("icon_32x32@2x.png", 64),
-    ("icon_128x128.png", 128),
-    ("icon_128x128@2x.png", 256),
-    ("icon_256x256.png", 256),
-    ("icon_256x256@2x.png", 512),
-    ("icon_512x512.png", 512),
-    ("icon_512x512@2x.png", 1024)
-]
-
-for (name, size) in files {
-    try renderIcon(pixelSize: size, path: (outputDirectory as NSString).appendingPathComponent(name))
-}
-SWIFT
-
-"$SWIFTC" \
-  -sdk "$SDKROOT" \
-  -framework AppKit \
-  "$ICON_GENERATOR" \
-  -o "$ICON_GENERATOR_EXE"
-
-"$ICON_GENERATOR_EXE" "$ICONSET"
+/usr/bin/sips -z 16 16     "$ICON_SOURCE" --out "$ICONSET/icon_16x16.png" >/dev/null
+/usr/bin/sips -z 32 32     "$ICON_SOURCE" --out "$ICONSET/icon_16x16@2x.png" >/dev/null
+/usr/bin/sips -z 32 32     "$ICON_SOURCE" --out "$ICONSET/icon_32x32.png" >/dev/null
+/usr/bin/sips -z 64 64     "$ICON_SOURCE" --out "$ICONSET/icon_32x32@2x.png" >/dev/null
+/usr/bin/sips -z 128 128   "$ICON_SOURCE" --out "$ICONSET/icon_128x128.png" >/dev/null
+/usr/bin/sips -z 256 256   "$ICON_SOURCE" --out "$ICONSET/icon_128x128@2x.png" >/dev/null
+/usr/bin/sips -z 256 256   "$ICON_SOURCE" --out "$ICONSET/icon_256x256.png" >/dev/null
+/usr/bin/sips -z 512 512   "$ICON_SOURCE" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
+/usr/bin/sips -z 512 512   "$ICON_SOURCE" --out "$ICONSET/icon_512x512.png" >/dev/null
+/usr/bin/sips -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET/icon_512x512@2x.png" >/dev/null
 /usr/bin/iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
