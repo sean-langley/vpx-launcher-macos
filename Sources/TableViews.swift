@@ -296,6 +296,12 @@ struct DetailView: View {
                     Button("Reset Artwork") { model.clearArtworkOverride(for: entry) }
                     Button("Audit Table") { model.auditSelected(entry) }
                         .disabled(model.isAuditing)
+                    Button {
+                        model.makeTablePortable(entry)
+                    } label: {
+                        Label(model.isMakingTablePortable ? "Making Portable…" : "Make Table Portable", systemImage: "shippingbox.and.arrow.backward")
+                    }
+                    .disabled(model.isMakingTablePortable || model.isAuditing)
 
                     if model.onlineGameCount > 0 {
                         Button(entry.vpsMetadata == nil ? "Match with VPS…" : "Change VPS Match…") {
@@ -317,6 +323,7 @@ struct DetailView: View {
                         model.launchSelected()
                     } label: {
                         Label(model.isLaunching ? "Running…" : "Launch Table", systemImage: "play.fill")
+                            .foregroundStyle(.white)
                     }
                     .keyboardShortcut(.return, modifiers: [])
                     .buttonStyle(.borderedProminent)
@@ -327,5 +334,12 @@ struct DetailView: View {
             .padding(24)
         }
         .onAppear { model.ensurePreviewMedia(for: entry) }
+        .alert(item: $model.portableTableNotice) { notice in
+            Alert(
+                title: Text(notice.title),
+                message: Text(notice.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
     }
 }

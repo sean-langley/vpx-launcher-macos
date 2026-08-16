@@ -54,6 +54,12 @@ enum TableVerificationState: Equatable {
     }
 }
 
+struct PortableTableNotice: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
 struct LocalTableInfo: Hashable {
     var title = ""
     var description = ""
@@ -182,7 +188,7 @@ final class TableEntry: ObservableObject, Identifiable, Hashable {
     let hasSerum: Bool
     let hasVNI: Bool
     let hasMusic: Bool
-    let hasLocalPinMAME: Bool
+    @Published var hasLocalPinMAME: Bool
     let hasRulesheet: Bool
     let hasVPReg: Bool
     let hasINI: Bool

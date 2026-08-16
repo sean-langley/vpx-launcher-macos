@@ -31,6 +31,8 @@ struct ContentView: View {
                                     NSWorkspace.shared.activateFileViewerSelecting([entry.url])
                                 }
                                 Button("Audit Table") { model.auditSelected(entry) }
+                                Button("Make Table Portable") { model.makeTablePortable(entry) }
+                                    .disabled(model.isMakingTablePortable)
                                 if model.hasVPXTool {
                                     Button("Load High Scores") { model.loadHighScores(for: entry) }
                                 }

@@ -12,6 +12,8 @@ final class LauncherModel: ObservableObject {
     @Published var isAuditing = false
     @Published var isLaunching = false
     @Published var isRefreshingOnline = false
+    @Published var isMakingTablePortable = false
+    @Published var portableTableNotice: PortableTableNotice?
     @Published var statusText = ""
     @Published var searchText = ""
     @Published var showSettings = false

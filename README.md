@@ -66,6 +66,7 @@ The build script uses the active macOS SDK selected by `xcrun`. It intentionally
 4. If installed, confirm the detected `vpxtool` path.
 5. Use **Refresh VPS** to download/update community metadata and artwork matching.
 6. Use **Audit Tables** to check ROM references and, when `vpxtool` is available, VPX file structure.
+7. Select a table and use **Make Table Portable** to copy its directly referenced ROM ZIP from the configured ROM folder into a table-local `pinmame/roms` folder. Existing differing files are never overwritten, and the launcher warns when clone/parent dependencies cannot be determined.
 
 ## `vpxtool` detection
 

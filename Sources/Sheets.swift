@@ -41,8 +41,11 @@ struct MatchSheet: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Cancel") { dismiss() }
-                Button("Use Match") {
+                Button {
                     if let selected { model.setManualMatch(entry, game: selected) }
+                } label: {
+                    Text("Use Match")
+                        .foregroundStyle(.white)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selected == nil)

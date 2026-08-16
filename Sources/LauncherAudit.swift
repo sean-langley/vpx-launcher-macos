@@ -5,6 +5,116 @@ import Foundation
 extension LauncherModel {
     // MARK: Table / ROM audit
 
+    func makeTablePortable(_ entry: TableEntry) {
+        guard !isMakingTablePortable else { return }
+
+        let tool = vpxtoolURL()
+        let binary = vpxBinaryURL()
+        guard tool != nil || binary != nil else {
+            statusText = "Could not determine the table ROM — check vpxtool or VPX in Settings"
+            showSettings = true
+            return
+        }
+
+        isMakingTablePortable = true
+        statusText = "Making \(entry.displayName) portable…"
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = self.portableROMCopy(entry: entry, vpxtool: tool, vpxBinary: binary)
+            DispatchQueue.main.async {
+                self.isMakingTablePortable = false
+                self.statusText = result.status
+                self.portableTableNotice = PortableTableNotice(title: result.title, message: result.message)
+                if result.succeeded {
+                    entry.hasLocalPinMAME = true
+                    entry.romAudit = .present(result.romName ?? "ROM")
+                    entry.romAuditSource = result.source
+                }
+            }
+        }
+    }
+
+    private func portableROMCopy(entry: TableEntry, vpxtool: URL?, vpxBinary: URL?) -> (succeeded: Bool, title: String, message: String, status: String, romName: String?, source: String) {
+        let detection = detectRequiredROM(entry: entry, vpxtool: vpxtool, vpxBinary: vpxBinary)
+        guard let romName = detection.romName else {
+            let detail = detection.error ?? "No PinMAME ROM reference was found in this table."
+            return (false, "Could Not Make Table Portable", detail, "Portable copy failed: \(detail)", nil, detection.source)
+        }
+
+        let configuredDirectory = URL(
+            fileURLWithPath: NSString(string: romFolderPath).expandingTildeInPath,
+            isDirectory: true
+        )
+        guard let source = matchingROM(named: romName, in: configuredDirectory) else {
+            let expected = configuredDirectory.appendingPathComponent("\(romName).zip").path
+            let detail = "The required ROM \(romName).zip was not found in the configured ROM folder.\n\nExpected: \(expected)"
+            return (false, "ROM Not Found", detail, "Portable copy failed: \(romName).zip not found", romName, detection.source)
+        }
+
+        let destinationDirectory = entry.folderURL
+            .appendingPathComponent("pinmame", isDirectory: true)
+            .appendingPathComponent("roms", isDirectory: true)
+        let destination = destinationDirectory.appendingPathComponent(source.lastPathComponent)
+
+        do {
+            if fm.fileExists(atPath: destination.path) {
+                if fm.contentsEqual(atPath: source.path, andPath: destination.path) {
+                    let message = "\(source.lastPathComponent) is already present and identical. No copy was needed.\n\nWarning: clone/parent ROM dependencies could not be determined reliably, so only the directly referenced ROM was checked."
+                    return (true, "Table Is Already Portable", message, "Portable ROM already present: \(source.lastPathComponent)", romName, detection.source)
+                }
+                let detail = "A different file already exists at \(destination.path). It was left unchanged."
+                return (false, "Local ROM Already Exists", detail, "Portable copy stopped: existing ROM differs", romName, detection.source)
+            }
+
+            try fm.createDirectory(at: destinationDirectory, withIntermediateDirectories: true)
+            try fm.copyItem(at: source, to: destination)
+            let message = "Copied \(source.lastPathComponent) to:\n\(destination.path)\n\nWarning: clone/parent ROM dependencies could not be determined reliably, so only the directly referenced ROM was copied."
+            return (true, "Table Made Portable", message, "Copied \(source.lastPathComponent) beside \(entry.fileName)", romName, detection.source)
+        } catch {
+            let detail = "Could not copy \(source.lastPathComponent): \(error.localizedDescription)"
+            return (false, "Copy Failed", detail, "Portable copy failed: \(error.localizedDescription)", romName, detection.source)
+        }
+    }
+
+    private func detectRequiredROM(entry: TableEntry, vpxtool: URL?, vpxBinary: URL?) -> (romName: String?, source: String, error: String?) {
+        if let vpxtool {
+            let result = runProcess(vpxtool.path, ["romname", entry.url.path])
+            if result.status == 0, let rom = parseROMNameFromToolOutput(result.stdout) {
+                return (rom, "vpxtool • portable copy", nil)
+            }
+            if result.status == 0, result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return (nil, "vpxtool", "No PinMAME ROM reference was found in this table.")
+            }
+        }
+
+        guard let vpxBinary else {
+            return (nil, "vpxtool", "vpxtool could not determine the ROM and VPX is unavailable for fallback extraction.")
+        }
+
+        do {
+            let script = try obtainScript(for: entry, vpxBinary: vpxBinary)
+            guard let rom = detectROMName(in: script) else {
+                return (nil, "VBS fallback", "No PinMAME ROM reference was found in this table.")
+            }
+            return (rom, "VBS fallback • portable copy", nil)
+        } catch {
+            return (nil, "VBS fallback", error.localizedDescription)
+        }
+    }
+
+    private func matchingROM(named romName: String, in directory: URL) -> URL? {
+        guard let files = try? fm.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        let expected = "\(romName).zip"
+        return files.first {
+            $0.lastPathComponent.compare(expected, options: [.caseInsensitive, .literal]) == .orderedSame
+        }
+    }
+
     func deepAuditAll() {
         guard !tables.isEmpty else { return }
         let tool = vpxtoolURL()
